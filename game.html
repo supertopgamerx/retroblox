@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Retroblox - Client</title>
+    <style>body { margin: 0; overflow: hidden; cursor: crosshair; }</style>
+</head>
+<body>
+    <script src="https://cdnjs.cloudflare.com"></script>
+    <script>
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x5271FF); // Classic Sky
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Lighting
+        const light = new THREE.DirectionalLight(0xffffff, 1.2);
+        light.position.set(10, 20, 10);
+        scene.add(light);
+        scene.add(new THREE.AmbientLight(0x606060));
+
+        // The Classic Baseplate
+        const bpGeo = new THREE.BoxGeometry(100, 1, 100);
+        const bpMat = new THREE.MeshLambertMaterial({ color: 0x228B22 }); // Bright Green
+        const baseplate = new THREE.Mesh(bpGeo, bpMat);
+        scene.add(baseplate);
+
+        // A Dynablock Part
+        function createPart(x, y, z, color) {
+            const geo = new THREE.BoxGeometry(4, 1.2, 2);
+            const mat = new THREE.MeshLambertMaterial({ color: color });
+            const part = new THREE.Mesh(geo, mat);
+            part.position.set(x, y, z);
+            scene.add(part);
+        }
+
+        createPart(0, 1.1, 0, 0xff0000); // The "Spawn" Brick
+
+        camera.position.set(20, 15, 20);
+        camera.lookAt(0, 0, 0);
+
+        function animate() {
+            requestAnimationFrame(animate);
+            // Slow rotation for "Cinematic" feel
+            scene.rotation.y += 0.002;
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.onresize = () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        };
+    </script>
+</body>
+</html>
