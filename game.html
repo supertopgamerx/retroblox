@@ -1,59 +1,68 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Retroblox - Client</title>
-    <style>body { margin: 0; overflow: hidden; cursor: crosshair; }</style>
+    <meta charset="UTF-8">
+    <title>Retroblox - Game Client</title>
+    <style>body { margin: 0; overflow: hidden; background: #000; }</style>
 </head>
 <body>
+    <!-- Loads the 3D Engine -->
     <script src="https://cdnjs.cloudflare.com"></script>
     <script>
+        // 1. Scene Setup
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x5271FF); // Classic Sky
+        scene.background = new THREE.Color(0x87CEEB); // Sky Blue
 
+        // 2. Camera Setup
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer();
+        camera.position.set(30, 20, 30);
+        camera.lookAt(0, 5, 0);
+
+        // 3. Renderer Setup
+        const renderer = new THREE.WebGLRenderer({ antialias: false }); // False for that pixelated retro look
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // Lighting
-        const light = new THREE.DirectionalLight(0xffffff, 1.2);
+        // 4. Lighting (Classic Sunlight)
+        const light = new THREE.DirectionalLight(0xffffff, 1);
         light.position.set(10, 20, 10);
         scene.add(light);
-        scene.add(new THREE.AmbientLight(0x606060));
+        scene.add(new THREE.AmbientLight(0x404040));
 
-        // The Classic Baseplate
+        // 5. The Baseplate (DynaBlocks Style)
         const bpGeo = new THREE.BoxGeometry(100, 1, 100);
-        const bpMat = new THREE.MeshLambertMaterial({ color: 0x228B22 }); // Bright Green
+        const bpMat = new THREE.MeshLambertMaterial({ color: 0x228B22 }); // Dark Green
         const baseplate = new THREE.Mesh(bpGeo, bpMat);
         scene.add(baseplate);
 
-        // A Dynablock Part
-        function createPart(x, y, z, color) {
-            const geo = new THREE.BoxGeometry(4, 1.2, 2);
+        // 6. Add "Bricks"
+        function addBrick(x, y, z, color) {
+            const geo = new THREE.BoxGeometry(4, 1.2, 2); // Classic brick ratio
             const mat = new THREE.MeshLambertMaterial({ color: color });
-            const part = new THREE.Mesh(geo, mat);
-            part.position.set(x, y, z);
-            scene.add(part);
+            const brick = new THREE.Mesh(geo, mat);
+            brick.position.set(x, y, z);
+            scene.add(brick);
         }
 
-        createPart(0, 1.1, 0, 0xff0000); // The "Spawn" Brick
+        // Create a basic tower
+        addBrick(0, 1, 0, 0xff0000);
+        addBrick(0, 2.2, 0, 0xffff00);
+        addBrick(0, 3.4, 0, 0x0000ff);
 
-        camera.position.set(20, 15, 20);
-        camera.lookAt(0, 0, 0);
-
+        // 7. Animation Loop (Slow rotation)
         function animate() {
             requestAnimationFrame(animate);
-            // Slow rotation for "Cinematic" feel
-            scene.rotation.y += 0.002;
+            scene.rotation.y += 0.003; 
             renderer.render(scene, camera);
         }
         animate();
 
-        window.onresize = () => {
+        // Handle Resize
+        window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
-        };
+        });
     </script>
 </body>
 </html>
