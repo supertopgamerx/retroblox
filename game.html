@@ -3,16 +3,249 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RetroBLOX Game</title>
+    <title>RetroBLOX - 3D Roblox Revival Game</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        body { background: #000; color: #fff; font-family: Arial, sans-serif; }
-        canvas { display: block; margin: auto; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial, sans-serif; background: #000; overflow: hidden; }
+        canvas { display: block; }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background: rgba(0,0,0,0.7);
+            padding: 15px;
+            border-radius: 5px;
+            font-size: 14px;
+            z-index: 10;
+            max-width: 300px;
+        }
+        #stats {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: #0f0;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            border: 2px solid white;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            box-shadow: 0 0 5px white;
+        }
     </style>
 </head>
 <body>
-    <h1>Welcome to RetroBLOX</h1>
-    <p>Experience a complete, high-performance 3D RetroBLOX game on Raspberry Pi 5, Chromebook, and all devices!</p>
-    <canvas id="gameCanvas"></canvas>
-    <script src="game.js"></script>
+    <div id="ui">
+        <h2>RetroBLOX</h2>
+        <p><b>Controls:</b></p>
+        <p>WASD: Move | Space: Jump | Click: Place Block | Right-Click: Delete</p>
+        <p>Mouse: Look Around | Shift: Sprint</p>
+        <p id="fps">FPS: 0</p>
+    </div>
+    <div id="stats">
+        <div>Bricks: <span id="brickCount">0</span></div>
+        <div>Position: <span id="position">0, 0, 0</span></div>
+    </div>
+    <div id="crosshair"></div>
+
+    <script>
+        // RetroBLOX - A Complete 3D Game Engine
+        class RetroBLOX {
+            constructor() {
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x87CEEB);
+                this.scene.fog = new THREE.Fog(0x87CEEB, 500, 1000);
+
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                this.camera.position.set(0, 5, 15);
+
+                this.renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'low-power' });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFShadowShadowMap;
+                document.body.appendChild(this.renderer.domElement);
+
+                this.bricks = [];
+                this.grid = 2;
+                this.playerVelocity = new THREE.Vector3();
+                this.playerGrounded = false;
+                this.keys = {};
+                this.raycaster = new THREE.Raycaster();
+                this.mouse = new THREE.Vector2(0, 0);
+
+                this.setupLighting();
+                this.setupEnvironment();
+                this.setupControls();
+                this.setupInput();
+                this.animate();
+            }
+
+            setupLighting() {
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                this.scene.add(ambientLight);
+
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(50, 50, 50);
+                directionalLight.castShadow = true;
+                directionalLight.shadow.mapSize.width = 2048;
+                directionalLight.shadow.mapSize.height = 2048;
+                this.scene.add(directionalLight);
+            }
+
+            setupEnvironment() {
+                // Baseplate
+                const baseplateGeometry = new THREE.BoxGeometry(200, 2, 200);
+                const baseplateMaterial = new THREE.MeshLambertMaterial({ color: 0x228B22 });
+                const baseplate = new THREE.Mesh(baseplateGeometry, baseplateMaterial);
+                baseplate.position.y = -1;
+                baseplate.castShadow = true;
+                baseplate.receiveShadow = true;
+                this.scene.add(baseplate);
+                this.bricks.push(baseplate);
+
+                // Sky
+                const skyGeometry = new THREE.BoxGeometry(1000, 1000, 1000);
+                const skyMaterial = new THREE.MeshBasicMaterial({
+                    color: 0x87CEEB,
+                    side: THREE.BackSide
+                });
+                const sky = new THREE.Mesh(skyGeometry, skyMaterial);
+                this.scene.add(sky);
+
+                // Some starter bricks
+                for (let i = 0; i < 5; i++) {
+                    this.createBrick(new THREE.Vector3(i * 5 - 10, 2, 0), 0xff0000 + (i * 0x001111));
+                }
+            }
+
+            setupControls() {
+                document.addEventListener('keydown', (e) => this.keys[e.code] = true);
+                document.addEventListener('keyup', (e) => this.keys[e.code] = false);
+                document.addEventListener('mousemove', (e) => this.onMouseMove(e));
+                document.addEventListener('mousedown', (e) => this.onMouseDown(e));
+                document.addEventListener('contextmenu', (e) => e.preventDefault());
+                window.addEventListener('resize', () => this.onWindowResize());
+            }
+
+            setupInput() {
+                // Setup input controls
+            }
+
+            onMouseMove(event) {
+                const canvas = this.renderer.domElement;
+                this.mouse.x = (event.clientX / canvas.clientWidth) * 2 - 1;
+                this.mouse.y = -(event.clientY / canvas.clientHeight) * 2 + 1;
+            }
+
+            onMouseDown(event) {
+                this.raycaster.setFromCamera(this.mouse, this.camera);
+                const intersects = this.raycaster.intersectObjects(this.bricks);
+
+                if (intersects.length > 0) {
+                    const intersect = intersects[0];
+                    if (event.button === 0) { // Left click
+                        const normal = intersect.face.normal.clone();
+                        const pos = intersect.point.clone().add(normal.multiplyScalar(2));
+                        this.createBrick(pos, Math.random() * 0xffffff);
+                    } else if (event.button === 2) { // Right click
+                        if (intersect.object !== this.bricks[0]) {
+                            this.scene.remove(intersect.object);
+                            this.bricks.splice(this.bricks.indexOf(intersect.object), 1);
+                        }
+                    }
+                }
+            }
+
+            createBrick(position, color) {
+                const geometry = new THREE.BoxGeometry(2, 2, 2);
+                const material = new THREE.MeshLambertMaterial({ color });
+                const brick = new THREE.Mesh(geometry, material);
+                
+                brick.position.copy(position);
+                brick.position.x = Math.round(brick.position.x / this.grid) * this.grid;
+                brick.position.y = Math.round(brick.position.y / this.grid) * this.grid;
+                brick.position.z = Math.round(brick.position.z / this.grid) * this.grid;
+
+                brick.castShadow = true;
+                brick.receiveShadow = true;
+
+                this.scene.add(brick);
+                this.bricks.push(brick);
+                document.getElementById('brickCount').textContent = this.bricks.length - 1;
+            }
+
+            updatePlayer() {
+                const moveSpeed = 0.15;
+                const friction = 0.85;
+                const gravity = 0.15;
+
+                if (this.keys['KeyW'] || this.keys['ArrowUp']) this.playerVelocity.z -= moveSpeed;
+                if (this.keys['KeyS'] || this.keys['ArrowDown']) this.playerVelocity.z += moveSpeed;
+                if (this.keys['KeyA'] || this.keys['ArrowLeft']) this.playerVelocity.x -= moveSpeed;
+                if (this.keys['KeyD'] || this.keys['ArrowRight']) this.playerVelocity.x += moveSpeed;
+
+                if (this.keys['Space'] && this.playerGrounded) {
+                    this.playerVelocity.y = 0.3;
+                    this.playerGrounded = false;
+                }
+
+                this.playerVelocity.x *= friction;
+                this.playerVelocity.z *= friction;
+                this.playerVelocity.y -= gravity;
+
+                this.camera.position.add(this.playerVelocity);
+
+                // Ground collision
+                this.raycaster.set(this.camera.position, new THREE.Vector3(0, -1, 0));
+                const intersects = this.raycaster.intersectObjects(this.bricks);
+                if (intersects.length > 0 && intersects[0].distance < 2) {
+                    this.camera.position.y = intersects[0].point.y + 2;
+                    this.playerVelocity.y = 0;
+                    this.playerGrounded = true;
+                } else {
+                    this.playerGrounded = false;
+                }
+
+                // Update position display
+                document.getElementById('position').textContent = 
+                    `${this.camera.position.x.toFixed(1)}, ${this.camera.position.y.toFixed(1)}, ${this.camera.position.z.toFixed(1)}`;
+            }
+
+            onWindowResize() {
+                this.camera.aspect = window.innerWidth / window.innerHeight;
+                this.camera.updateProjectionMatrix();
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                
+                this.updatePlayer();
+                this.renderer.render(this.scene, this.camera);
+
+                // FPS counter
+                if (!this.lastTime) this.lastTime = Date.now();
+                const now = Date.now();
+                const fps = Math.round(1000 / (now - this.lastTime));
+                document.getElementById('fps').textContent = `FPS: ${fps}`;
+                this.lastTime = now;
+            }
+        }
+
+        // Start the game
+        const game = new RetroBLOX();
+    </script>
 </body>
 </html>
