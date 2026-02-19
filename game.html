@@ -1,133 +1,144 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>RetroBlox.beta Client - 2005 Edition</title>
+    <title>DynaBlocks 2005 - Interactive</title>
     <style>
         body { margin: 0; overflow: hidden; background: #000; font-family: 'Courier New', Courier, monospace; }
-        
-        /* Retro UI Design */
-        #ui { 
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%; 
-            color: white; pointer-events: none; padding: 15px; box-sizing: border-box;
-        }
-        .header { font-size: 24px; font-weight: bold; text-shadow: 2px 2px #000; }
-        .stats { position: absolute; bottom: 20px; left: 20px; font-size: 14px; background: rgba(0,0,0,0.5); padding: 5px; border: 1px solid #777; }
-        .toolbar { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 5px; pointer-events: auto; }
-        .tool { width: 50px; height: 50px; background: #ddd; border: 3px outset #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; color: black; font-weight: bold; }
-        .tool:active { border-style: inset; }
+        #ui { position: absolute; top: 10px; left: 10px; color: white; text-shadow: 2px 2px #000; pointer-events: none; z-index: 10; }
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 20px; height: 20px; border: 2px solid white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
     </style>
 </head>
 <body>
-
     <div id="ui">
-        <div class="header">RetroBlox Beta 0.1 (Internal Build)</div>
-        <div class="stats">
-            Position: <span id="pos">0, 0, 0</span><br>
-            Players: 1/1 (Solo Mode)
-        </div>
-        <div class="toolbar">
-            <div class="tool" onclick="addBrick(0xff0000)">R</div>
-            <div class="tool" onclick="addBrick(0xffff00)">Y</div>
-            <div class="tool" onclick="addBrick(0x0000ff)">B</div>
-            <div class="tool" onclick="resetCamera()">CAM</div>
-        </div>
+        <b>DynaBlocks Beta 0.1</b><br>
+        WASD: Move | Click: Place | Right-Click: Delete<br>
+        Click screen to start (Esc to exit)
     </div>
+    <div id="crosshair"></div>
 
-    <!-- Essential: Working Three.js Library -->
     <script src="https://cdnjs.cloudflare.com"></script>
-    
-    <script>
-        // 1. Scene Setup
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x82C8E5); // Iconic 2005 Sky Blue
+    <!-- PointerLockControls is standard for first-person games -->
+    <script src="https://cdn.jsdelivr.net"></script>
 
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: false }); // No antialiasing for that raw look
+    <script>
+        // --- Setup ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x5271FF); 
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: false });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // 2. Vintage Lighting
+        // --- Lighting ---
         const light = new THREE.DirectionalLight(0xffffff, 1.2);
         light.position.set(10, 20, 10);
         scene.add(light);
-        scene.add(new THREE.AmbientLight(0x777777));
+        scene.add(new THREE.AmbientLight(0x888888));
 
-        // 3. The 2005 "Stud" Texture
+        // --- Stud Texture ---
         const canvas = document.createElement('canvas');
         canvas.width = 64; canvas.height = 64;
         const ctx = canvas.getContext('2d');
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, 64, 64);
-        ctx.fillStyle = '#bbbbbb'; // Darker gray for the classic stud shadow
-        ctx.beginPath(); ctx.arc(32, 32, 22, 0, Math.PI * 2); ctx.fill();
-        
+        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 64, 64);
+        ctx.fillStyle = '#cccccc'; ctx.beginPath(); ctx.arc(32, 32, 15, 0, Math.PI * 2); ctx.fill();
         const studTexture = new THREE.CanvasTexture(canvas);
-        studTexture.wrapS = THREE.RepeatWrapping;
-        studTexture.wrapT = THREE.RepeatWrapping;
-        studTexture.repeat.set(2, 1); // Typical 2x4 brick stud spacing
-        studTexture.magFilter = THREE.NearestFilter; // pixelated look
+        studTexture.repeat.set(2, 1);
 
-        // 4. Building the World
-        const baseplateGeo = new THREE.BoxGeometry(200, 1, 200);
-        const baseplateMat = new THREE.MeshLambertMaterial({ color: 0x228B22 }); // Dark Grass Green
-        const baseplate = new THREE.Mesh(baseplateGeo, baseplateMat);
+        // --- Physics/Collision Tracking ---
+        const bricks = [];
+        const grid = 2; // Snap size
+
+        // --- Baseplate ---
+        const bpGeo = new THREE.BoxGeometry(100, 1, 100);
+        const bpMat = new THREE.MeshLambertMaterial({ color: 0x228B22 });
+        const baseplate = new THREE.Mesh(bpGeo, bpMat);
+        baseplate.position.y = -0.5;
         scene.add(baseplate);
+        bricks.push(baseplate);
 
-        function createBrick(x, y, z, color) {
+        // --- Character Controls ---
+        const controls = new THREE.PointerLockControls(camera, document.body);
+        document.body.addEventListener('click', () => controls.lock());
+        camera.position.set(0, 5, 15);
+
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        const onKeyDown = (e) => {
+            if (e.code === 'KeyW') moveForward = true;
+            if (e.code === 'KeyS') moveBackward = true;
+            if (e.code === 'KeyA') moveLeft = true;
+            if (e.code === 'KeyD') moveRight = true;
+        };
+        const onKeyUp = (e) => {
+            if (e.code === 'KeyW') moveForward = false;
+            if (e.code === 'KeyS') moveBackward = false;
+            if (e.code === 'KeyA') moveLeft = false;
+            if (e.code === 'KeyD') moveRight = false;
+        };
+        document.addEventListener('keydown', onKeyDown);
+        document.addEventListener('keyup', onKeyUp);
+
+        // --- Building System ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2(0, 0); // Center of screen
+
+        function createBrick(pos, normal, color = 0xff0000) {
             const geometry = new THREE.BoxGeometry(4, 1.2, 2);
-            const materials = [
-                new THREE.MeshLambertMaterial({ color: color }), // right
-                new THREE.MeshLambertMaterial({ color: color }), // left
-                new THREE.MeshLambertMaterial({ color: color, map: studTexture }), // top (STUDS!)
-                new THREE.MeshLambertMaterial({ color: color }), // bottom
-                new THREE.MeshLambertMaterial({ color: color }), // front
-                new THREE.MeshLambertMaterial({ color: color })  // back
-            ];
-            const brick = new THREE.Mesh(geometry, materials);
-            brick.position.set(x, y + 0.6, z);
+            const mats = Array(6).fill(new THREE.MeshLambertMaterial({ color: color }));
+            mats[2] = new THREE.MeshLambertMaterial({ color: color, map: studTexture });
+
+            const brick = new THREE.Mesh(geometry, mats);
+            
+            // Snap to grid based on the surface normal
+            brick.position.copy(pos).add(normal.multiplyScalar(0.6));
+            brick.position.x = Math.round(brick.position.x / grid) * grid;
+            brick.position.z = Math.round(brick.position.z / grid) * grid;
+            
             scene.add(brick);
-            return brick;
+            bricks.push(brick);
         }
 
-        // Initial Build
-        createBrick(0, 0.5, 0, 0xff0000);
-        createBrick(0, 1.7, 0, 0xffff00);
-        createBrick(5, 0.5, -5, 0x0000ff);
+        window.addEventListener('mousedown', (e) => {
+            if (!controls.isLocked) return;
 
-        // 5. Interaction Logic
-        function addBrick(color) {
-            const rx = (Math.random() - 0.5) * 20;
-            const rz = (Math.random() - 0.5) * 20;
-            createBrick(rx, 0.5, rz, color);
-        }
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(bricks);
 
-        function resetCamera() {
-            camera.position.set(30, 20, 30);
-            camera.lookAt(0, 0, 0);
-        }
-        resetCamera();
+            if (intersects.length > 0) {
+                const intersect = intersects[0];
+                if (e.button === 0) { // Left Click: Place
+                    createBrick(intersect.point, intersect.face.normal, 0xffff00);
+                } else if (e.button === 2) { // Right Click: Delete
+                    if (intersect.object !== baseplate) {
+                        scene.remove(intersect.object);
+                        bricks.splice(bricks.indexOf(intersect.object), 1);
+                    }
+                }
+            }
+        });
+        window.addEventListener('contextmenu', (e) => e.preventDefault()); // Disable browser right-click menu
 
-        // 6. Render Loop
+        // --- Animation Loop ---
+        let prevTime = performance.now();
         function animate() {
             requestAnimationFrame(animate);
-            
-            // Subtle rotation like a showcase
-            const time = Date.now() * 0.0003;
-            camera.position.x = Math.cos(time) * 40;
-            camera.position.z = Math.sin(time) * 40;
-            camera.lookAt(0, 5, 0);
+            const time = performance.now();
+            const delta = (time - prevTime) / 1000;
 
-            // Update UI position stats
-            document.getElementById('pos').innerText = 
-                `${Math.round(camera.position.x)}, ${Math.round(camera.position.y)}, ${Math.round(camera.position.z)}`;
+            if (controls.isLocked) {
+                const speed = 40.0;
+                if (moveForward) controls.moveForward(speed * delta);
+                if (moveBackward) controls.moveForward(-speed * delta);
+                if (moveLeft) controls.moveRight(-speed * delta);
+                if (moveRight) controls.moveRight(speed * delta);
+            }
 
+            prevTime = time;
             renderer.render(scene, camera);
         }
         animate();
 
-        // Handle Resizing
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
